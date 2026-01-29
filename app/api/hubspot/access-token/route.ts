@@ -1,4 +1,5 @@
 import { getPool } from "../../../../src/lib/db";
+import { requireApiKey } from "../../../../src/lib/auth";
 
 export const runtime = "nodejs";
 
@@ -11,7 +12,7 @@ type TokenRow = {
 
 function isExpired(expiresAt: string | null): boolean {
   if (!expiresAt) return true;
-  // refresh a little early (60s) to avoid edge timing issues
+  // Refresh 60s early to avoid edge timing issues
   const expiryMs = new Date(expiresAt).getTime() - 60_000;
   return Date.now() >= expiryMs;
 }
@@ -38,18 +39,28 @@ async function refreshAccessToken(refreshToken: string) {
 
   const accessToken = String(data.access_token);
   const expiresInSec = Number(data.expires_in || 0);
-  const expiresAt = expiresInSec ? new Date(Date.now() + expiresInSec * 1000).toISOString() : null;
+  const expiresAt = expiresInSec
+    ? new Date(Date.now() + expiresInSec * 1000).toISOString()
+    : null;
 
-  return { ok: true as const, accessToken, expiresAt, data };
+  return { ok: true as const, accessToken, expiresAt };
 }
 
 export async function POST(req: Request) {
-  const { hub_id } = await req.json().catch(() => ({}));
-  if (!hub_id) {
-    return Response.json({ ok: false, message: "Missing hub_id" }, { status: 400 });
+  // 🔐 Protect endpoint
+  const denied = requireApiKey(req);
+  if (denied) return denied;
+
+  const body = await req.json().catch(() => ({}));
+  const hubId = Number(body.hub_id);
+
+  if (!hubId) {
+    return Response.json(
+      { ok: false, message: "Missing hub_id" },
+      { status: 400 }
+    );
   }
 
-  const hubId = Number(hub_id);
   const pool = getPool();
 
   const r = await pool.query<TokenRow>(
@@ -60,12 +71,15 @@ export async function POST(req: Request) {
   );
 
   if (r.rowCount === 0) {
-    return Response.json({ ok: false, message: "Unknown hub_id" }, { status: 404 });
+    return Response.json(
+      { ok: false, message: "Unknown hub_id" },
+      { status: 404 }
+    );
   }
 
   const row = r.rows[0];
 
-  // If token exists and isn't expired, return it
+  // ✅ Return cached token if still valid
   if (row.access_token && !isExpired(row.expires_at)) {
     return Response.json({
       ok: true,
@@ -76,11 +90,12 @@ export async function POST(req: Request) {
     });
   }
 
-  // Otherwise refresh
+  // 🔁 Refresh token
   const refreshed = await refreshAccessToken(row.refresh_token);
+
   if (!refreshed.ok) {
     return Response.json(
-      { ok: false, message: "Refresh failed", hubspot: refreshed.data },
+      { ok: false, message: "Token refresh failed" },
       { status: 400 }
     );
   }

@@ -1,4 +1,4 @@
-import { pool } from "@/lib/db";
+import { pool } from "../../../src/lib/db";import { pool } from "@/lib/db";
 
 export const runtime = "nodejs"; // IMPORTANT: pg requires Node runtime
 

@@ -6,7 +6,9 @@ declare global {
 }
 
 export function getPool(): Pool {
-  if (global.__pgPool) return global.__pgPool;
+  if (global.__pgPool) {
+    return global.__pgPool;
+  }
 
   const connectionString = process.env.DATABASE_URL;
   if (!connectionString) {

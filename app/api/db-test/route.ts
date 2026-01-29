@@ -1,6 +1,6 @@
-import { pool } from "../../../src/lib/db";import { pool } from "@/lib/db";
+import { pool } from "../../../src/lib/db";
 
-export const runtime = "nodejs"; // IMPORTANT: pg requires Node runtime
+export const runtime = "nodejs";
 
 export async function GET() {
   const result = await pool.query("SELECT 1 as ok");

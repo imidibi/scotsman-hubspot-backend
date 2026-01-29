@@ -23,7 +23,9 @@ export async function GET(req: Request) {
     );
   }
 
-  if (!code) return Response.json({ ok: false, message: "Missing code" }, { status: 400 });
+  if (!code) {
+    return Response.json({ ok: false, message: "Missing code" }, { status: 400 });
+  }
 
   // CSRF protection
   if (!returnedState || !expectedState || returnedState !== expectedState) {
@@ -45,7 +47,9 @@ export async function GET(req: Request) {
   });
 
   const data = await resp.json();
-  if (!resp.ok) return Response.json({ ok: false, hubspot: data }, { status: 400 });
+  if (!resp.ok) {
+    return Response.json({ ok: false, hubspot: data }, { status: 400 });
+  }
 
   const hubId = Number(data.hub_id);
   const refreshToken = String(data.refresh_token);
@@ -67,7 +71,7 @@ export async function GET(req: Request) {
     [hubId, refreshToken, accessToken, expiresAt, scopes]
   );
 
-  // Clear the state cookie and redirect to a friendly page
+  // Clear OAuth state cookie and redirect to a friendly page
   return new Response(null, {
     status: 302,
     headers: {

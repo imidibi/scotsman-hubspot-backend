@@ -1,9 +1,9 @@
+export const runtime = "nodejs";
+
 export function GET() {
   const clientId = process.env.HUBSPOT_CLIENT_ID!;
   const redirectUri = process.env.HUBSPOT_REDIRECT_URI!;
   const scope = process.env.HUBSPOT_SCOPES ?? "oauth";
-
-  // We'll store/validate state later; for now it's enough to include it.
   const state = crypto.randomUUID();
 
   const url = new URL("https://app.hubspot.com/oauth/authorize");
@@ -13,5 +13,11 @@ export function GET() {
   url.searchParams.set("response_type", "code");
   url.searchParams.set("state", state);
 
-  return Response.redirect(url.toString(), 302);
+  return new Response(null, {
+    status: 302,
+    headers: {
+      Location: url.toString(),
+      "Set-Cookie": `hs_oauth_state=${state}; Path=/; HttpOnly; Secure; SameSite=Lax; Max-Age=600`,
+    },
+  });
 }

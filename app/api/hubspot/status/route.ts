@@ -4,11 +4,13 @@ import { requireApiKey } from "../../../../src/lib/auth";
 export const runtime = "nodejs";
 
 export async function GET(req: Request) {
-  const auth = requireApiKey(req);
-  if (!auth.ok) {
-    return Response.json({ ok: false, error: auth.error }, { status: auth.status });
-  }
-
+const auth = requireApiKey(req);
+if (!auth) {
+  return Response.json({ ok: false, error: "Unauthorized" }, { status: 401 });
+}
+if (!auth.ok) {
+  return Response.json({ ok: false, error: auth.error }, { status: auth.status });
+}
   const pool = getPool();
 
   // Connected if we have at least one token row. (Later: filter by user/tenant.)

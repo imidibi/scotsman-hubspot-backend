@@ -1,3 +1,4 @@
+import { NextRequest } from "next/server";
 import { requireApiKey } from "../../../../../../src/lib/auth";
 import { getPool } from "../../../../../../src/lib/db";
 
@@ -116,11 +117,11 @@ async function batchRead(objectType: "companies" | "contacts", ids: string[], ac
   return json.results ?? [];
 }
 
-export async function GET(req: Request, ctx: { params: { dealId: string } }) {
+export async function GET(req: NextRequest, context: { params: Promise<{ dealId: string }> }) {
   const authResp = requireApiKey(req);
   if (authResp) return authResp;
 
-  const dealId = ctx.params.dealId;
+const { dealId } = await context.params;
   if (!dealId) return Response.json({ ok: false, message: "Missing dealId" }, { status: 400 });
 
   try {

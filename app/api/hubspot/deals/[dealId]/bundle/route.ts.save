@@ -85,42 +85,15 @@ async function hubspotGET(path: string, accessToken: string) {
   const resp = await fetch(`https://api.hubapi.com${path}`, {
     headers: { authorization: `Bearer ${accessToken}` },
   });
-
   if (!resp.ok) {
     const text = await resp.text();
     throw new Error(`HubSpot GET ${path} failed: ${resp.status} ${text}`);
   }
-
   return resp.json();
 }
 
-const COMPANY_PROPS = [
-  "name",
-  "domain",
-  "phone",
-  "website",
-  "address",
-  "city",
-  "state",
-  "zip",
-  "country",
-];
-
-const CONTACT_PROPS = [
-  "firstname",
-  "lastname",
-  "email",
-  "phone",
-  "jobtitle",
-];
-
-async function batchRead(
-  objectType: "companies" | "contacts",
-  ids: string[],
-  accessToken: string
-) {
+async function batchRead(objectType: "companies" | "contacts", ids: string[], accessToken: string) {
   if (ids.length === 0) return [];
-
   const resp = await fetch(`https://api.hubapi.com/crm/v3/objects/${objectType}/batch/read`, {
     method: "POST",
     headers: {
@@ -128,7 +101,9 @@ async function batchRead(
       "content-type": "application/json",
     },
     body: JSON.stringify({
-      properties: objectType === "companies" ? COMPANY_PROPS : CONTACT_PROPS,
+      properties: objectType === "companies"
+        ? ["name", "domain"]
+        : ["firstname", "lastname", "email"],
       inputs: ids.map((id) => ({ id })),
     }),
   });
@@ -142,26 +117,23 @@ async function batchRead(
   return json.results ?? [];
 }
 
-export async function GET(
-  req: NextRequest,
-  context: { params: Promise<{ dealId: string }> }
-) {
+export async function GET(req: NextRequest, context: { params: Promise<{ dealId: string }> }) {
   const authResp = requireApiKey(req);
   if (authResp) return authResp;
 
-  const { dealId } = await context.params;
+const { dealId } = await context.params;
   if (!dealId) return Response.json({ ok: false, message: "Missing dealId" }, { status: 400 });
 
   try {
     const accessToken = await getValidAccessToken();
 
-    // 1) Deal
+    // 1) Fetch deal
     const deal = await hubspotGET(
       `/crm/v3/objects/deals/${encodeURIComponent(dealId)}?properties=dealname,amount,dealstage,closedate`,
       accessToken
     );
 
-    // 2) Associations (v4)
+    // 2) Fetch association IDs (v4 associations endpoints)
     const companiesAssoc = await hubspotGET(
       `/crm/v4/objects/deals/${encodeURIComponent(dealId)}/associations/companies?limit=50`,
       accessToken
@@ -171,14 +143,10 @@ export async function GET(
       accessToken
     );
 
-    const companyIds: string[] = (companiesAssoc.results ?? []).map((r: any) =>
-      String(r.toObjectId)
-    );
-    const contactIds: string[] = (contactsAssoc.results ?? []).map((r: any) =>
-      String(r.toObjectId)
-    );
+    const companyIds: string[] = (companiesAssoc.results ?? []).map((r: any) => String(r.toObjectId));
+    const contactIds: string[] = (contactsAssoc.results ?? []).map((r: any) => String(r.toObjectId));
 
-    // 3) Full objects (batch)
+    // 3) Fetch full objects (batch)
     const companies = await batchRead("companies", companyIds.slice(0, 1), accessToken); // 0 or 1 company
     const contacts = await batchRead("contacts", contactIds, accessToken);
 
@@ -187,13 +155,6 @@ export async function GET(
           id: String(companies[0].id),
           name: companies[0].properties?.name ?? "",
           domain: companies[0].properties?.domain ?? null,
-          phone: companies[0].properties?.phone ?? null,
-          website: companies[0].properties?.website ?? null,
-          address: companies[0].properties?.address ?? null,
-          city: companies[0].properties?.city ?? null,
-          state: companies[0].properties?.state ?? null,
-          zip: companies[0].properties?.zip ?? null,
-          country: companies[0].properties?.country ?? null,
         }
       : null;
 
@@ -202,26 +163,21 @@ export async function GET(
       firstname: c.properties?.firstname ?? "",
       lastname: c.properties?.lastname ?? "",
       email: c.properties?.email ?? null,
-      phone: c.properties?.phone ?? null,
-      jobtitle: c.properties?.jobtitle ?? null,
     }));
 
     return Response.json({
       ok: true,
       deal: {
-        id: String(deal?.id ?? dealId),
-        dealname: deal?.properties?.dealname ?? "",
-        amount: deal?.properties?.amount ?? null,
-        dealstage: deal?.properties?.dealstage ?? null,
-        closedate: deal?.properties?.closedate ?? null,
+        id: String(deal.id),
+        dealname: deal.properties?.dealname ?? "",
+        amount: deal.properties?.amount ?? null,
+        dealstage: deal.properties?.dealstage ?? null,
+        closedate: deal.properties?.closedate ?? null,
       },
       company,
       contacts: contactsOut,
     });
-  } catch (err: any) {
-    return Response.json(
-      { ok: false, message: err?.message ?? "Unknown error" },
-      { status: 500 }
-    );
+  } catch (e: any) {
+    return Response.json({ ok: false, message: e?.message ?? "Error" }, { status: 500 });
   }
 }
